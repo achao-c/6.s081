@@ -193,7 +193,7 @@ UPROGS=\
 	$U/_grind\
 	$U/_wc\
 	$U/_zombie\
-
+	$U/_sleep\
 
 
 
@@ -407,3 +407,6 @@ myapi.key:
 
 
 .PHONY: handin tarball tarball-pref clean grade handin-check
+
+gdb:
+	riscv64-unknown-elf-gdb kernel/kernel
