@@ -14,7 +14,7 @@ main(int argc, char *argv[])
     exit(1);
   }
 
-  if (trace(atoi(argv[1])) < 0) {
+  if (trace(atoi(argv[1])) < 0) {  // 这里trace系统调用只是设置好要检测的掩码
     fprintf(2, "%s: trace failed\n", argv[0]);
     exit(1);
   }
@@ -22,6 +22,6 @@ main(int argc, char *argv[])
   for(i = 2; i < argc && i < MAXARG; i++){
     nargv[i-2] = argv[i];
   }
-  exec(nargv[0], nargv);
+  exec(nargv[0], nargv);  // 执行待执行程序
   exit(0);
 }
