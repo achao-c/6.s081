@@ -80,3 +80,15 @@ kalloc(void)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
 }
+
+// Show the free memory bytes
+uint32 showFreeMemoryByte () {
+  const uint32 PAGE_SIZE_BYTE = 4096;
+  struct run* head = kmem.freelist;
+  uint32 num = 0;
+  while (head) {
+    ++num;
+    head = head->next;
+  }
+  return num*PAGE_SIZE_BYTE;
+}

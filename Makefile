@@ -195,7 +195,7 @@ UPROGS=\
 	$U/_zombie\
 	$U/_trace\
 	$U/_sleep\
-
+	$U/_sysinfotest
 
 
 ifeq ($(LAB),$(filter $(LAB), pgtbl lock))
