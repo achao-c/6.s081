@@ -655,3 +655,12 @@ procdump(void)
     printf("\n");
   }
 }
+
+uint32 showValidProcNum() {
+  uint32 valid_num = 0;
+  struct proc *p;
+  for(p = proc; p < &proc[NPROC]; p++) {
+    if(p->state != UNUSED) ++valid_num;
+  }
+  return valid_num;
+}

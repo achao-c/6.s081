@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
 
 uint64
 sys_exit(void)
@@ -100,5 +101,21 @@ uint64 sys_trace(void) {
   int trace_mask;
   if (argint(0, &trace_mask) < -1) return -1;
   myproc()->trace_mask = trace_mask;
+  return 0;
+}
+
+uint32 showFreeMemoryByte();
+uint32 showValidProcNum();
+uint64 sys_sysinfo(void) {
+  struct sysinfo info;
+  struct sysinfo* info_ptr = &info;
+  info_ptr->freemem = showFreeMemoryByte();
+  info_ptr->nproc = showValidProcNum();
+
+  struct proc *p = myproc();
+  uint64 sysinfo_ptr; // user pointer to struct sysinfo
+  if (argaddr(0, &sysinfo_ptr) < 0) return -1; // 获取用户态参数的地址
+  if(copyout(p->pagetable, sysinfo_ptr, (char *)info_ptr, sizeof(*info_ptr)) < 0) // 把参数从内核态传到用户态
+      return -1;
   return 0;
 }
