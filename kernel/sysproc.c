@@ -77,10 +77,30 @@ sys_sleep(void)
 
 
 #ifdef LAB_PGTBL
+pte_t * walk(pagetable_t pagetable, uint64 va, int alloc);
 int
 sys_pgaccess(void)
 {
-  // lab pgtbl: your code here.
+  uint64 check_addr;
+  int page_num;
+  uint64 uesr_bitmap_addr;
+  if(argaddr(0, &check_addr) < 0)
+    return -1;
+  if(argint(1, &page_num) < 0)
+    return -1;
+  if (page_num > 32) return -1;
+  if(argaddr(2, &uesr_bitmap_addr) < 0)
+    return -1;
+  
+  uint32 bitmap = 0;
+  for (int i = 0; i < page_num; ++i) {
+    pte_t* pte_ptr = walk(myproc()->pagetable, check_addr+i*PGSIZE, 0);
+    if (pte_ptr != 0 &&  (*pte_ptr & PTE_A)) {
+      *pte_ptr = (*pte_ptr & (~PTE_A)); // ? why
+      bitmap |= (1L << i);
+    }
+  }
+  copyout(myproc()->pagetable, uesr_bitmap_addr, (char*)&bitmap, sizeof(bitmap));
   return 0;
 }
 #endif
@@ -107,3 +127,4 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+

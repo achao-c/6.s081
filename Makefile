@@ -407,3 +407,9 @@ myapi.key:
 
 
 .PHONY: handin tarball tarball-pref clean grade handin-check
+
+server:
+	$(MAKE) qemu-gdb
+
+gdb: 
+	riscv64-unknown-elf-gdb kernel/kernel -x init.gdb

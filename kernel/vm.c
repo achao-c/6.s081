@@ -5,7 +5,7 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
-
+#include <stddef.h>
 /*
  * the kernel's page table.
  */
@@ -431,4 +431,47 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+void reCover(char* pre) {
+  int removeCount = 3;  // 要去除的字符数
+  size_t len = strlen(pre);
+  if (len >= removeCount) {
+      pre[len - removeCount] = '\0';
+  }
+}
+
+void strcat(char* des, const char* s) {
+  size_t num = strlen(des);
+  size_t idx = 0;
+  for (; idx < strlen(s); ++idx) {
+    des[num+idx] = s[idx];
+  }
+  des[num+idx] = '\0';
+}
+void showPageTableInfo(pagetable_t pagetable, char* pre) {
+  // there are 2^9 = 512 PTEs in a page table.
+  for(int i = 0; i < 512; i++) {
+    pte_t pte = pagetable[i];
+    if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0) {
+      // this PTE points to a lower-level page table.
+      uint64 child = PTE2PA(pte);
+      printf("%s%d: pte %p  pa %p\n", pre, i, pte, child);
+      strcat(pre, " ..");
+      showPageTableInfo((pagetable_t)child, pre);
+      reCover(pre);
+    } 
+    // 遇到最后一级页表，停止回溯
+    else if(pte & PTE_V) {
+      uint64 va_high = PTE2PA(pte);
+      printf("%s%d: pte %p  pa %p\n", pre, i, pte, va_high);
+    }
+  }
+}
+
+// Show the pagetable's information.
+void vmprint(pagetable_t pagetable) {
+  printf("page table %p\n", pagetable);
+  char pre[16] = {'.', '.', 0};
+  showPageTableInfo(pagetable, pre);
 }
