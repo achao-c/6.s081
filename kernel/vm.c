@@ -15,6 +15,7 @@ extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
 
+void ref_inc(uint64 pa);
 // Make a direct-map page table for the kernel.
 pagetable_t
 kvmmake(void)
@@ -162,6 +163,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 // Remove npages of mappings starting from va. va must be
 // page-aligned. The mappings must exist.
 // Optionally free the physical memory.
+// 将页表中的映射关系清除，可以决定是否释放对应的物理内存
 void
 uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
 {
@@ -287,8 +289,8 @@ void
 uvmfree(pagetable_t pagetable, uint64 sz)
 {
   if(sz > 0)
-    uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
-  freewalk(pagetable);
+    uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1); // 解除对应关系并且释放物理内存
+  freewalk(pagetable); // 释放page所占的内存
 }
 
 // Given a parent process's page table, copy
@@ -303,7 +305,6 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -312,13 +313,25 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
+    /*
+    if((mem = kalloc()) == 0)  // 分配新的物理内存空间
       goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    memmove(mem, (char*)pa, PGSIZE); // 复制内容
+    */
+    
+    // 新旧页表均指向同一块原来内存区域，同时需要更改可以写的区域标记为fork且只读，可以读的不用管，因为我们不需要更改它
+    uint new_flags = flags;
+    if (flags & PTE_W) {
+      new_flags = flags | PTE_COW;
+      new_flags &= (~PTE_W);
+    }
+    
+    *pte = PA2PTE(pa) | new_flags; // 更新老的映射关系的控制位（这里不能使用mappage，因为）
+    if(mappages(new, i, PGSIZE, (uint64)pa, new_flags) != 0){ // 建立新的映射关系
       goto err;
     }
+    // 需要增加引用的次数，free的时候好使用
+    ref_inc(pa); 
   }
   return 0;
 
@@ -343,6 +356,7 @@ uvmclear(pagetable_t pagetable, uint64 va)
 // Copy from kernel to user.
 // Copy len bytes from src to virtual address dstva in a given page table.
 // Return 0 on success, -1 on error.
+int cow_alloc(pagetable_t pt, uint64 va);
 int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
@@ -350,6 +364,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
+    if (cow_alloc(pagetable, va0) != 0) return -1;  // 首先判断要放置的用户虚拟内存对应的物理内存是否需要重新开辟
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;

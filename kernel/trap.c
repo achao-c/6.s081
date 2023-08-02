@@ -5,6 +5,9 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+pte_t * walk(pagetable_t pagetable, uint64 va, int alloc);
+void ref_dec(uint64 pa);
+void ref_inc(uint64 pa);
 
 struct spinlock tickslock;
 uint ticks;
@@ -29,6 +32,36 @@ trapinithart(void)
   w_stvec((uint64)kernelvec);
 }
 
+
+int cow_alloc(pagetable_t pt, uint64 va) {
+  // 1.找到标志位
+  if (va >= MAXVA) return -1; 
+  pte_t *pte;
+  if((pte = walk(pt, va, 0)) == 0)
+    return -1;
+  if((*pte & PTE_V) == 0)
+    return -1;
+
+  uint64 pa = PTE2PA(*pte);
+  uint flags = PTE_FLAGS(*pte);
+  if ((flags & PTE_COW) == 0) {
+    return 0;
+  }
+  // 此时一定是可以写的
+  else {
+    char *mem;
+    if((mem = kalloc()) == 0)  return -1;// 分配新的物理内存空间
+    memmove(mem, (char*)pa, PGSIZE); // 复制内容
+    kfree((char*)pa);
+
+    uint new_flags = flags & (~PTE_COW); 
+    new_flags |= PTE_W; 
+    *pte = PA2PTE(mem) | new_flags;  // 针对已存在的就只能替换，不能使用函数
+  }
+  return 0;
+}
+
+
 //
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
@@ -50,7 +83,7 @@ usertrap(void)
   // save user program counter.
   p->trapframe->epc = r_sepc();
   
-  if(r_scause() == 8){
+  if(r_scause() == 8) {
     // system call
 
     if(p->killed)
@@ -65,11 +98,21 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if((which_dev = devintr()) != 0){
+  } 
+  else if((which_dev = devintr()) != 0) {
     // ok
-  } else {
-    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
-    printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+  } 
+  else if (r_scause() == 13 || r_scause() == 15) {
+    uint64 va = r_stval();
+    if (va >= MAXVA || (va <= PGROUNDDOWN(p->trapframe->sp) && va >= PGROUNDDOWN(p->trapframe->sp) - PGSIZE)) {
+        p->killed = 1;
+    }
+    else if (cow_alloc(p->pagetable, va) != 0) p->killed = 1;
+    
+  }
+  else {
+    //printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+    //printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
   }
 
